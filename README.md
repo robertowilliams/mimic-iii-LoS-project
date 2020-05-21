@@ -1,9 +1,9 @@
 # mimic-iii-ehr-project
 Project to predict Length of Stay of patients with respiratory diseases using tidymodels.
 
-**Author:** Roberto Williams Batista
+**Author :** Roberto Williams Batista
 
-**Extract from :
+**Extract from :**
 
 "A methodology for clustering health survey participants and predicting hospital length of stay using novel data mining and machine learning tools"
 
