@@ -4,10 +4,13 @@ Project to predict Length of Stay of patients with respiratory diseases using ti
 *Author:* Roberto Williams Batista
 
 *Extract from *
+
 "A methodology for clustering health survey participants and predicting hospital length of stay using novel data mining and machine learning tools"
 
 #Introduction#
+
 ##ICU LOS##
+
 ICU LOS is one of the crucial metrics of hospital performance evaluation (World Health Organization, n.d.). It consists of the statistical measure of mean (or median) time spent by the patient in the ICU hospital facility calculated subtracting the discharge date minus admission date. The metric can be applied to other specific areas of the hospital, as an emergency, or applied to the hospital as a whole. Its usage is not new and can be found in registers of the American Medical Association in 1907 for diseases like tuberculosis (American Medical Association, 1907). The LOS prediction for ICU is used to minimize the idleness of one of the most expensive hospital resources. In 2005 the ICU represented 15% of the total hospital beds in the United States (US), with occupancy of 68% and reaching 0.66% of the Gross Domestic Product (GDP) of the country. The recent study (Wilcox, Vaughan, Chong, Neumann, & Bell, 2019) revels the ICU cost-effectiveness ratios ranged from $119,635 to $876,539. These figures highlight the importance of accurate LOS prediction unfolding potential benefits like ICU bed availability, ICU usage planning in elective surgical procedures, unit transfer projection, supplies consumption and trends, and workflow feedback with valuable information.
 
 The study of LOS prediction has been approached for a long time and was significantly changed with medical advances and computation technology. The work (Gustafson, 1968) in 1968 uses five different methodologies for predicting the LOS of inguinal herniotomy patients. The data were stratified in four categories of LOS, from 39 patients admitted to surgery in Henry Ford Hospital, Detroit, during January and February of 1966. The first prediction method is the subjective point estimates using three physician groups, which will predict the LOS after evaluating the patient abstract and choose one of twelve hypothesized LOS. The second method is multiple linear regression analysis, approaching the medical profile of the patient classifying each item in a discrete rate from 0 to 5. It was used the linear, binary, logarithmic, and interaction terms model. The third method uses the mean of the LOS of all the herniotomy patients discharged from the hospital in 1965.
