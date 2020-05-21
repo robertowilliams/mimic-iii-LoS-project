@@ -1,0 +1,301 @@
+---
+title: "MIMIC-III DIAGNOSES TABLE"
+output: "html_notebook"
+---
+Test with ADM_H
+has cut for outliers >15
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(stringi)
+library(stringr)
+library(splitstackshape)
+library(qdapTools)
+library(psych)
+```
+____
+## Loading the Datasets
+```{r}
+setwd("~/Documents/_DATA/original/")
+df_diag <- read_csv("DIAGNOSES_ICD.csv")
+```
+___
+## Exploratory Data Analysis
+
+```{r}
+df_diag %>% glimpse()
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+df_diag %>% describe()
+```
+
+Unique ICD9 Codes:
+
+```{r, warning=FALSE, message=FALSE}
+df_diag %>% 
+  select(ICD9_CODE) %>%
+  unique() %>% 
+  count()
+```
+Filter the admissions resulted in the ADMISSIONS (E) notebook.
+
+```{r}
+setwd("~/Documents/_DATA/subset/")
+df_adm_G <- read_csv("df_adm_5.csv")
+```
+
+Using the vector of HADM_ID from the ADMISSIONS df_adm_F.csv whic contains pattients older than 50 yo and younger than 89 yo.
+```{r}
+df_admin_G_col <- df_adm_G %>% 
+  select(HADM_ID)
+
+df_diag_A <- left_join(df_admin_G_col, df_diag)
+df_diag_A
+```
+
+Unique ICD9 Codes after used for the admissions filtered in the ADMISSIONS notebook:
+
+```{r, warning=FALSE, message=FALSE}
+df_diag_A %>% 
+  select(ICD9_CODE) %>% 
+  unique() %>% 
+  count()
+```
+
+```{r}
+icd9_table <- df_diag_A %>% count(ICD9_CODE) %>% 
+  arrange(desc(n) ) %>% 
+  mutate(perc = round((n/sum(n))*100,3)) %>% 
+  as_tibble() %>% 
+    head(30)
+icd9_table
+```
+
+```{r}
+icd9_table %>% select(perc) %>% 
+  sum()
+
+#Top 30 ICD Code represents (%)
+```
+
+
+###Creating a new df to receive the new ICD9 mapping (df_diag_B).
+
+```{r}
+df_diag_B <- df_diag_A
+```
+
+Recode the ICD9 code to represent the code family generalizing the variable
+
+ICD9 Codes Source: http://www.icd9data.com/2015/Volume1/default.htm
+
+#### Mapping the IDC9 codes
+
+Initiating new collumns
+```{r}
+df_diag_B$ICD9_FAMILY  <- ""
+df_diag_B$ICD9_V       <- 0
+df_diag_B$ICD9_E       <- 0
+df_diag_B$ICD9_NUMBERS <- 0
+```
+
+#### Encoding ICD9 V codes
+
+ V15.82: Personal history of tobacco use.
+ V45.81: Aortocoronary bypass status.
+ V45.82: Percutaneous transluminal coronary angioplasty status.
+ V58.61: Long-term (current) use of anticoagulants.
+ __Remaining codes:__
+ V01~V91: Factors Influencing Health Status
+ 
+```{r}
+df_diag_B$ICD9_V <- ifelse((str_detect(df_diag_B$ICD9_CODE, regex("^V"))), 
+                           sub(".", "", df_diag_B$ICD9_CODE), # Remove the first character of the string
+                           0)
+stri_sub(df_diag_B$ICD9_V, 3,2) <- "."
+df_diag_B$ICD9_V <- df_diag_B$ICD9_V %>% as.numeric()
+```
+
+Dropping NA's in ICD9_V
+```{r}
+df_diag_B <- df_diag_B %>% 
+  drop_na(ICD9_V)
+```
+
+Mapping `V` codes.
+
+```{r}
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_V >=     1] <- "Factors_influencing"
+#Now overwritting the previous string in specific cases.
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_V == 15.82] <- "Tobacco_use"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_V == 45.81] <- "Aortocoronary_bypass"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_V == 45.82] <- "Coronary_angioplasty"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_V == 58.61] <- "Anticoagulants"
+```
+
+Verifying the mapping process
+```{r}
+df_diag_B$ICD9_FAMILY %>%  
+  unique()
+```
+The "" displayed in the chunk above is related to ICD codes diferent than "V".
+
+#### Encoding ICD9 E codes
+
+E000~E999:
+E000.X~E030 "External"
+E800~E807   "External"
+E810~E848   "Accident"
+E849        "Place_of_occurrence"
+E850~E858   "Poisoning"
+E860~E869   "Poisoning"
+E870~E876   "Complication"
+E878~E8879  "Complication"
+E880~E888   "Accident"
+E890~E899   "Accident"
+E900~E909   "Accident"
+
+`E` ICD9 codes of interest:
+The top 30 codes does not have any code `E`. Based on this I will use the
+families' names.
+
+```{r}
+df_diag_B$ICD9_E <- ifelse({str_detect(df_diag_B$ICD9_CODE, regex("^E", ignore_case = TRUE))}, sub(".", "", df_diag_B$ICD9_CODE), 0)
+```
+
+```{r}
+df_diag_B$ICD9_E <- substr(df_diag_B$ICD9_E, start = 1, stop = 3)
+```
+
+```{r}
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >  0   & df_diag_B$ICD9_E <= 30]  <- "External"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 800 & df_diag_B$ICD9_E <= 848] <- "Accident"
+# df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 840 & df_diag_B$ICD9_E <= 848] <- "Accident"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E == 849] <- "Place_of_occurrence"
+
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 850 & df_diag_B$ICD9_E <= 869] <- "Poisoning"
+# df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 860 & df_diag_B$ICD9_E <= 869] <- "Poisoning"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 870 & df_diag_B$ICD9_E <= 879] <- "Misadventure"
+# df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 878 & df_diag_B$ICD9_E <= 879] <- "Misadventure"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 880 & df_diag_B$ICD9_E <= 929] <- "Accident"
+# df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 890 & df_diag_B$ICD9_E <= 899] <- "Accident"
+# df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 900 & df_diag_B$ICD9_E <= 929] <- "Accident"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 930 & df_diag_B$ICD9_E <= 949] <- "Adverse_Effect"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 950 & df_diag_B$ICD9_E <= 969] <- "Nonnatural"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 970 & df_diag_B$ICD9_E <= 979] <- "Legal"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 980 & df_diag_B$ICD9_E <= 989] <- "Undetermined"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_E >= 990 & df_diag_B$ICD9_E <= 999] <- "War"
+
+```
+
+Verifying the mapping process
+```{r}
+df_diag_B$ICD9_FAMILY %>% unique()
+```
+
+#### Encoding ICD9 Numerical codes
+
+000~999:
+  001-139  "Infectious" - Infectious And Parasitic Diseases
+  140-239  "Neoplasms" - Neoplasms
+  240-279  "Metabolic" - Endocrine, Nutritional And Metabolic Diseases, And Immunity Disorders
+  280-289  "Blood" - Diseases Of The Blood And Blood-Forming Organs
+  290-319  "Mental" - Mental Disorders
+  320-389  "Nervous" - Diseases Of The Nervous System And Sense Organs
+  390-459  "Circulatory" - Diseases Of The Circulatory System
+  460-519  "Respiratory" - Diseases Of The Respiratory System
+  520-579  "Digestive" - Diseases Of The Digestive System
+  580-629  "Genitourinary" - Diseases Of The Genitourinary System
+  630-679  "Pregnancy" - Complications Of Pregnancy, Childbirth, And The Puerperium
+  680-709  "Skin" - Diseases Of The Skin And Subcutaneous Tissue
+  710-739  "Musculoskeletal" - Diseases Of The Musculoskeletal System And Connective Tissue
+  740-759  "Congenital" - Congenital Anomalies
+  760-779  "Perinatal" - Certain Conditions Originating In The Perinatal Period
+  780-799  "Ill-Defined" - Symptoms, Signs, And Ill-Defined Conditions
+  800-999  "Injury_Poisoning" - Injury And Poisoning
+
+```{r}
+df_diag_B$ICD9_NUMBERS <- ifelse(
+                     (str_detect(df_diag_B$ICD9_CODE, regex("^[^a-zA-Z]", ignore_case = TRUE)))
+                     ,substr(df_diag_B$ICD9_CODE, start = 1, stop = 3), 0)
+```
+
+Mapping the ICD9 code to the correspondent family
+```{r}
+df_diag_B$ICD9_NUMBERS <- as.numeric(df_diag_B$ICD9_NUMBERS)
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >=   1 & df_diag_B$ICD9_NUMBERS < 140] <- "Infectious"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 140 & df_diag_B$ICD9_NUMBERS < 240] <- "Neoplasms"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 240 & df_diag_B$ICD9_NUMBERS < 280] <- "Metabolic"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 280 & df_diag_B$ICD9_NUMBERS < 290] <- "Blood"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 290 & df_diag_B$ICD9_NUMBERS < 320] <- "Mental"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 320 & df_diag_B$ICD9_NUMBERS < 390] <- "Nervous"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 390 & df_diag_B$ICD9_NUMBERS < 460] <- "Circulatory"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 460 & df_diag_B$ICD9_NUMBERS < 520] <- "Respiratory"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 520 & df_diag_B$ICD9_NUMBERS < 580] <- "Digestive"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 580 & df_diag_B$ICD9_NUMBERS < 630] <- "Genitourinary"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 630 & df_diag_B$ICD9_NUMBERS < 680] <- "Pregnancy"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 680 & df_diag_B$ICD9_NUMBERS < 710] <- "Skin"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 710 & df_diag_B$ICD9_NUMBERS < 740] <- "Musculoskeletal"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 740 & df_diag_B$ICD9_NUMBERS < 760] <- "Congenital"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 760 & df_diag_B$ICD9_NUMBERS < 780] <- "Perinatal"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 780 & df_diag_B$ICD9_NUMBERS < 800] <- "Ill-Defined"
+df_diag_B$ICD9_FAMILY[df_diag_B$ICD9_NUMBERS >= 800 & df_diag_B$ICD9_NUMBERS <= 999]<- "Injury_Poisoning"
+
+```
+
+Verifying the mapping process
+```{r}
+df_diag_B$ICD9_FAMILY %>% unique()
+```
+
+```{r}
+df_diag_B %>% count(ICD9_FAMILY) %>% 
+  arrange(desc(n) ) %>% 
+  mutate(perc = round((n/sum(n))*100,3)) %>% 
+  as_tibble()
+
+```
+
+Let's drop auxiliar columns.
+```{r}
+df_diag_B %>% 
+  colnames()
+```
+```{r}
+df_diag_B %<>% 
+  select(
+    -ICD9_V, 
+    -ICD9_E, 
+    -ICD9_NUMBERS) 
+```
+
+
+#### Groupding the IDC9 Codes per `HADM_ID`
+     
+```{r}
+df_diag_C <- df_diag_B %>% 
+     group_by(HADM_ID) %>% 
+     mutate(ICD9_CODES_LIST = paste0(ICD9_FAMILY, collapse = ",")) %>% 
+     filter(SEQ_NUM == 1) %>%
+     select(HADM_ID, SUBJECT_ID, ICD9_CODES_LIST)
+```
+
+Creating Dummy variables
+(https://stackoverflow.com/questions/56264462/how-to-convert-comma-separated-multiple-responses-into-dummy-coded-columns-in-r/56264964#56264964)
+
+```{r}
+icd.split <- strsplit(df_diag_C$ICD9_CODES_LIST, ",")
+lev <- unique(unlist(icd.split))
+icd.dummy <- lapply(icd.split, function(x) table(factor(x, levels=lev)))
+
+df_diag_D <- with(df_diag_C, data.frame(HADM_ID, SUBJECT_ID, do.call(rbind, icd.dummy)))
+```
+
+```{r}
+setwd("~/Documents/_DATA/subset/")
+write_csv(df_diag_D, "df_diag_5.csv")
+```
+

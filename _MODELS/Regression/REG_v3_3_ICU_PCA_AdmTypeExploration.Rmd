@@ -1,0 +1,299 @@
+---
+title: "Prediction Dataset for ICU LOS"
+output: "html_notebook"
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+library(DataExplorer)
+library(broom)
+library(magrittr)
+library(caret)
+library(pls)
+library(forcats)
+library(skimr)
+set.seed(2020)
+```
+Load the datasets:
+```{r, warning=FALSE, message=FALSE}
+df_adm_G <- read_csv("~/Desktop/THESIS-II/thesis/NOTEBOOKS/EDA_SUBSET/data/df_adm_G.csv")
+df_diag_D<- read_csv("~/Desktop/THESIS-II/thesis/NOTEBOOKS/EDA_SUBSET/data/df_diag_D.csv")
+```
+
+Inner join `df_adm_G` and `df_diag_D`
+```{r }
+df_adm_G %>% 
+        inner_join(df_diag_D, by = "HADM_ID") %>% 
+write_csv("mimic_c.csv")
+```
+
+```{r, message=FALSE, warning=TRUE}
+mimic <- read_csv("mimic_c.csv") %>% 
+         mutate_if(is_character, as_factor) %>% 
+         select(everything(), -starts_with("LOS"), starts_with("LOS"))
+```
+
+```{r}
+mimic %>% names()
+```
+
+```{r}
+#mimic %>%  glimpse()
+```
+
+Initial mandatory Drops:
+```{r}
+mimic %<>% 
+  select(-HADM_ID, -SUBJECT_ID.x, -SUBJECT_ID.y, 
+         -LOS_HOSP,
+         -LOS_GROUP_ICU,
+         -LOS_GROUP_HOSP
+         )
+```
+
+```{r }
+mimic %>% skim()
+```
+```{r}
+mimic %>% head()
+```
+
+
+Investigating the best prediction subset for Admission Type
+
+```{r}
+mimic_Elective <- mimic %>% filter(ADMISSION_TYPE %in% "ELECTIVE") %>% 
+  select(-ADMISSION_TYPE)
+mimic_Elective %>% head()
+```
+
+```{r}
+mimic_Elective %>% skim()
+```
+
+### 1. Statistical relevance (reference)
+
+```{r}
+model_Elective <- lm( formula = LOS_ICU ~ ., data = mimic_Elective)
+
+summary(model_Elective)
+```
+
+
+First filter of variables by significance, except the demographics variables.
+
+```{r}
+mimic_2 <- mimic_1 %>% select(
+                  -Nervous,
+                  -Blood,
+                  -Skin,
+                  -Place_of_occurrence,
+                  -Undetermined,
+                  -External,
+                  -Digestive,
+                  -Perinatal,
+                  -Legal,
+                  -Pregnancy
+)
+```
+
+```{r}
+model_2 <- lm( formula = LOS_ICU ~ ., data = mimic_2)
+
+summary(model_2)
+```
+
+```{r}
+mimic_2 <- mimic_2%>% filter(FIRST_CAREUNIT %in% c("MICU", "SICU"))
+```
+
+```{r}
+model_2 <- lm( formula = LOS_ICU ~ ., data = mimic_2)
+
+summary(model_2)
+```
+
+```{r}
+mimic_2%<>% filter(ADMISSION_TYPE %in% c("URGENT")) %>% 
+            select(-ADMISSION_TYPE)
+```
+
+```{r}
+mimic_2 %>% head()
+```
+
+
+```{r}
+model_2 <- lm( formula = LOS_ICU ~ ., data = mimic_2)
+
+summary(model_2)
+```
+
+
+
+
+
+
+
+
+
+
+_______________
+
+
+
+```{r}
+training <- mimic$LOS_ICU %>% createDataPartition(p = 0.8, list = FALSE)
+
+train.data <- mimic[training,]
+test.data <- mimic[-training,]
+```
+
+```{r }
+model_pcr <- train(
+  LOS_ICU~., data = train.data, method= "pcr",
+  scale = FALSE,
+  trControl = trainControl("cv", number = 42),
+  tuneLength = 42
+)
+```
+
+```{r }
+plot(model_pcr)
+```
+
+```{r }
+model_pcr$bestTune
+```
+
+```{r }
+summary(model_pcr$finalModel)
+```
+
+Prediction
+
+```{r }
+predictions_pcr <- model_pcr %>% predict(test.data)
+tibble(
+  RMSE = caret::RMSE(predictions_pcr, test.data$LOS_ICU),
+  Rsquare = caret::R2(predictions_pcr, test.data$LOS_ICU)
+)
+```
+
+
+
+PLS
+
+```{r }
+model_pls <- train(
+  LOS_ICU~., data = train.data, method= "pls",
+  scale = FALSE,
+  trControl = trainControl("cv", number = 25),
+  tuneLength = 25
+)
+```
+
+```{r }
+plot(model_pls)
+```
+
+```{r }
+model_pls$bestTune
+```
+
+```{r }
+summary(model_pls$finalModel)
+```
+
+
+Prediction
+
+```{r }
+predictions_pls <- model_pls %>% predict(test.data)
+tibble(
+  RMSE = caret::RMSE(predictions_pls, test.data$LOS_ICU),
+  Rsquare = caret::R2(predictions_pls, test.data$LOS_ICU)
+)
+```
+
+General Tests
+
+```{r}
+mimic %>%  head()
+```
+
+```{r}
+mimic %<>% 
+  #filter(FIRST_CAREUNIT %in% c("SICU")) %>% 
+  select(-FIRST_CAREUNIT,
+         -Perinatal,
+         -Legal,
+         -Pregnancy,
+         -Congenital,
+         -Undetermined,
+         -Nonnatural,
+         -Place_of_occurrence,
+         -Anticoagulants
+         )
+```
+
+
+```{r}
+model <- lm( formula = LOS_ICU ~ ., data = mimic)
+
+summary(model)
+```
+
+
+
+```{r}
+mimic %>%  colnames()
+```
+
+```{r}
+mimic<- mimic %>% 
+  select(
+        #-Legal,
+        # -Pregnancy,
+         #-Perinatal,
+         -External, 
+         #-Undetermined,
+         #-Anticoagulants, 
+         -Blood,
+         -Mental)
+```
+
+```{r}
+model <- lm( formula = LOS_ICU ~ ., data = mimic)
+
+summary(model)
+```
+
+```{r}
+training <- mimic$LOS_ICU %>% createDataPartition(p = 0.8, list = FALSE)
+
+train.data <- mimic[training,]
+test.data <- mimic[-training,]
+```
+
+```{r}
+model <- lm( formula = LOS_ICU ~ ., data = train.data)
+
+summary(model)
+```
+
+
+```{r}
+predictions <- model %>% predict(test.data)
+```
+
+```{r}
+RMSE(predictions, test.data$LOS_ICU)
+```
+
+```{r}
+R2(predictions, test.data$LOS_ICU)
+```
+
+

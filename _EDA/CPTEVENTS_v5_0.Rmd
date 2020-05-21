@@ -1,0 +1,62 @@
+---
+title: "R Notebook"
+#output: "html_notebook"
+---
+
+Library
+```{r , warning=FALSE, message=FALSE}
+library("tidyverse")
+library("tidymodels")
+library("skimr")
+```
+
+```{r}
+setwd("~/Documents/_DATA/original")
+cpt<- read_csv("CPTEVENTS.csv")
+```
+
+```{r}
+cpt %>%  head()
+```
+
+
+```{r}
+skim(cpt)
+```
+Dropping features which will not be used.
+```{r}
+cpt %<>%
+  select(
+    HADM_ID,
+    CPT_NUMBER,
+    TICKET_ID_SEQ
+  )
+```
+Selecting just the first CPT, which is applied in the begning of the treatment.
+```{r}
+cpt %<>% 
+  filter(TICKET_ID_SEQ == 1) %>% 
+  select(-TICKET_ID_SEQ)
+```
+
+```{r}
+cpt$CPT_NUMBER <- as_factor(cpt$CPT_NUMBER)
+```
+
+```{r}
+cpt %>% 
+  glimpse()
+
+```
+
+```{r}
+cpt %>% 
+  select(CPT_NUMBER) %>% 
+  unique()
+```
+
+```{r}
+setwd("~/Documents/_DATA/subset/")
+cpt %>%  write_csv("df_cpt_5.csv")
+```
+

@@ -1,0 +1,69 @@
+---
+title: "MIMIC-III ICUSTAY TABLE"
+output: "html_notebook"
+---
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(psych)
+library(ggpubr)
+```
+____
+## Loading the Datasets
+```{r}
+setwd("~/Documents/_DATA/original/")
+df_stay  <- read_csv("ICUSTAYS.csv")
+```
+___
+## Exploratory Data Analysis
+
+--- ICUSTAYS
+
+### ICUSTAYS.csv EDA (df_icu)
+
+```{r}
+df_stay %>% 
+  summary()
+```
+
+
+```{r}
+str(df_stay)
+```
+
+
+```{r}
+# df_icu %>% group_by(FIRST_CAREUNIT) %>% 
+#   summarize(median(LOS), mean(LOS), min(LOS), max(LOS))
+```
+
+__Reference:__
+`CCU`  : Coronary Care Unit
+`CSRU` : Cardiac Surgery Recovery Unit
+`MICU` : Medical Intensive Care Unit
+`SICU` : Surgical Intensive Care Unit 
+`TSICU`: Trauma Surgical Intensive Care Unit
+
+```{r}
+df_stay %>% ggplot(aes(x = FIRST_CAREUNIT)) +
+  geom_bar()
+```
+
+Dropping some features which will not be used.
+
+```{r}
+df_stay %>% 
+  colnames()
+```
+
+```{r}
+df_stay_A <- df_stay %>% 
+  select(-ROW_ID, -DBSOURCE, -FIRST_WARDID, -LAST_WARDID)
+```
+
+```{r}
+setwd("~/Documents/_DATA/subset/")
+write_csv(df_stay_A, "df_stay_5.csv")
+```
+

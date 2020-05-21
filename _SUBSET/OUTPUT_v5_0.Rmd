@@ -1,0 +1,69 @@
+---
+title: "MIMIC-III Subset Creation"
+output: "html_notebook"
+---
+
+
+libraries:
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(magrittr)
+```
+
+Load the data:
+```{r, warning=FALSE, message=FALSE}
+setwd("~/Documents/_DATA/subset/")
+
+df_adm_H  <- read_csv("df_adm_3-5.csv")
+
+df_diag_H <- read_csv("df_diag_5.csv")
+```
+
+```{r}
+df_adm_H %>% glimpse()
+```
+
+```{r}
+df_adm_H$GENDER           <- as_factor(df_adm_H$GENDER)
+df_adm_H$ETHNICITY_MAPPED <- as_factor(df_adm_H$ETHNICITY_MAPPED)
+df_adm_H$ADMISSION_TYPE   <- as_factor(df_adm_H$ADMISSION_TYPE)
+df_adm_H$FIRST_CAREUNIT   <- as_factor(df_adm_H$FIRST_CAREUNIT)
+df_adm_H$LOS_GROUP_ICU    <- as_factor(df_adm_H$LOS_GROUP_ICU)
+```
+
+```{r}
+df_adm_H %>% summary()
+```
+
+
+```{r}
+df_diag_H %>% glimpse()
+```
+
+Inner join `df_adm_H` and `df_diag_H`
+```{r}
+mimic <- df_adm_H %>% 
+        inner_join(df_diag_H, by = "HADM_ID")
+mimic %>% colnames()
+```
+
+
+```{r}
+mimic_icu <- mimic %>%  
+        select(
+               -LOS_GROUP_ICU,
+               -LOS_ICU,
+               -SUBJECT_ID.x, 
+               -SUBJECT_ID.y,
+               -LOS_ICU,
+                LOS_GROUP_ICU
+               )
+```
+
+```{r export the df}
+setwd("~/Documents/_DATA/output/")
+mimic_icu %>% 
+write_csv("mimic_test_1.csv")
+```
+

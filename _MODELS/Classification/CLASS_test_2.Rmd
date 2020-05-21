@@ -1,0 +1,451 @@
+---
+title: "Tidymodels Test 2"
+output: "html_notebook"
+---
+
+Author: Roberto Williams Batista
+Email: rbatista7484@floridapoly.edu
+
+*Notes:* 
+
+Using variables: ETHNICITY_MAPPED, Respiratory, and LOS_GROUP_ICU.
+Trimmed LOS > 90 days
+Range 3 ~ 10 days
+
+---
+
+Library
+
+---
+
+```{r library,warning = FALSE, messages = FALSE}
+library("magrittr")
+library("readr")
+library("dplyr")
+library("ggplot2")
+library("tibble")
+library("tidymodels")
+library("skimr")
+
+set.seed(2020)
+```
+
+
+Loading the datasets
+
+---
+
+```{r loading data, warning=FALSE, message=TRUE}
+setwd("~/Documents/_DATA/output")
+DATA <- read.csv("mimic_test_2.csv")
+mimic <- DATA
+```
+
+```{r skim, eval=FALSE}
+mimic %>% 
+  skim()
+```
+
+
+```{r colnames}
+mimic %>% colnames()
+```
+
+```{r Admission and 1st Care Unit, eval = FALSE}
+mimic %<>%
+  filter(ADMISSION_TYPE == "Urgency") %>% 
+  filter(FIRST_CAREUNIT == "SICU")
+```
+
+
+
+```{r Variables Selected, eval = FALSE}
+mimic %<>% 
+  select(
+    ETHNICITY_MAPPED,
+    Respiratory,
+    LOS_GROUP_ICU
+  )
+```
+
+
+Sampling the mimic dataframe
+
+```{r split}
+mimic_split <- 
+  initial_split(data = mimic, prop = 0.80)
+
+train <- training(mimic_split)
+test  <- testing(mimic_split)
+
+```
+
+Pre-processing with `recipes`
+
+```{r recipe}
+mimic_recipe <- 
+  recipe(LOS_GROUP_ICU ~., data = train) %>% 
+  #step_scale(all_predictors(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>% 
+  step_corr(all_predictors()) %>% 
+  prep(retain = TRUE)
+
+```
+
+Executing the pre-processing
+```{r executing recipe}
+mimic_test <- bake(mimic_recipe, new_data = test)
+
+mimic_train <- juice(mimic_recipe)
+```
+
+## MODELS
+
+1. RANDOM FOREST
+---
+
+1.1 ranger
+1.2 randomForest
+
+______________________________________________________________________________________
+
+1.1 ranger
+
+Predictions
+```{r ranger model}
+mimic_ranger <- 
+  rand_forest(trees = 100, mode = "classification") %>% 
+  set_engine("ranger") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+
+Model Validation
+```{r ranger metrics}
+mimic_ranger %>% 
+  predict(mimic_test, type = "class") %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r ranger ROC}
+mimic_ranger %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r ranger ROC object}
+RANGER <- mimic_ranger %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "Randon Forest ranger") %>% 
+  bind_cols(mimic_test)
+```
+
+
+1.2 randomForest
+
+Predictions
+```{r random forest}
+mimic_rf <- 
+  rand_forest(trees = 100, mode = "classification") %>% 
+  set_engine("randomForest") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+
+Model Validation
+```{r random forest metrics}
+mimic_rf %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r  random forest graphs}
+mimic_rf %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r random forest object}
+RANDON_FOREST <- mimic_rf %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "Random Forest") %>% 
+  bind_cols(mimic_test)
+```
+
+
+2. LOGISTIC REGRESSION MODEL
+---
+
+2.1 glm
+
+Predictions
+```{r logistic regression}
+mimic_lreg <- 
+  logistic_reg(mode  = "classification", penalty = 10, mixture = 0.1) %>%
+  set_engine("glm") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+
+Model Validation
+```{r logistic regression metrics}
+mimic_lreg %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r logistic regression graphs}
+mimic_lreg %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+```{r logistic regression object}
+LREG <- mimic_lreg %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "Logist Regression") %>% 
+  bind_cols(mimic_test)
+```
+
+3. BOOSTED TREES
+---
+
+3.1 xgboost
+
+Predictions
+```{r boosted tree xgboost}
+mimic_boost <- 
+  boost_tree(mode  = "classification", trees = 200) %>% 
+  set_engine("xgboost") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+
+Model Validation
+```{r boost tree metrics xgboost}
+mimic_boost %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+
+```
+ROC Curve
+```{r boosted trees ROC graph xgboost}
+mimic_boost %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r boost tree xgboost object xgboost}
+BT_XGBOOST <- mimic_boost %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "Boost Tree xgboost") %>% 
+  bind_cols(mimic_test)
+```
+
+4. DECISION TREES
+---
+
+4.1 rpart
+
+Predictions
+```{r rpart decision tree}
+mimic_rpart <- 
+  decision_tree(mode= "classification", cost_complexity = 0.0001, min_n = 5, tree_depth = 30) %>% 
+  set_engine("rpart") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+Model Validation
+```{r rpart decision tree metric}
+mimic_rpart %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r rpart decision tree ROC graph}
+mimic_rpart %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r rpart decision tree  object}
+RPART_DT <- mimic_rpart %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "Decision Tree rpart") %>% 
+  bind_cols(mimic_test)
+```
+
+4.2 c5.0 (`cost_complexity` and `tree_depthdoes` not exist in C5.0)
+
+---
+
+Predictions
+```{r C5.0 decision tree}
+mimic_c5 <- 
+  decision_tree(mode  = "classification", min_n = 2) %>% 
+  set_engine("C5.0") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+
+Model Validation
+```{r C5.0 decision tree metrics}
+mimic_c5 %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r C5.0 decision tree ROC graphs}
+mimic_c5 %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r C5 decision tree object}
+C5_D_TREE <- mimic_c5 %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "C5.0 Decision Tree") %>% 
+  bind_cols(mimic_test)
+```
+
+
+5. BOOST TREE VERSION
+
+---
+
+5.1 C5.0
+Predictions
+```{r C5.0 boost tree}
+mimic_c5_boost <- boost_tree(mode  = "classification", min_n = 2) %>% 
+  set_engine("C5.0") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+Model Validation
+```{r C5.0 boost tree metrics}
+mimic_c5_boost %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r C5.0 boost tree graphs}
+mimic_c5_boost %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r C5.0 boost tree object}
+C5_BOOST <- mimic_c5_boost %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "C5.0 Boost Tree") %>% 
+  bind_cols(mimic_test)
+```
+
+6. SVM
+---
+
+6.1 kernlab
+
+Predictions
+```{r svm}
+mimic_svm <- svm_rbf(mode  = "classification") %>% 
+  set_engine("kernlab") %>% 
+  fit(LOS_GROUP_ICU ~., data = mimic_train)
+```
+Model Validation
+```{r svm metrics}
+mimic_svm %>% 
+  predict(mimic_test) %>% 
+  bind_cols(mimic_test) %>% 
+  metrics(truth = LOS_GROUP_ICU, estimate = .pred_class)
+```
+ROC Curve
+```{r svm ROC graphs}
+mimic_svm %>%
+  predict(mimic_test, type = "prob") %>% 
+  bind_cols(mimic_test) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+```
+
+```{r svm object}
+KLAB <- mimic_svm %>%
+  predict(mimic_test, type = "prob") %>% 
+  mutate(model = "SVM") %>% 
+  bind_cols(mimic_test)
+```
+
+COMPARATIVE AMONG TOP 3 MODELS
+---
+
+```{r top 3 models comparison}
+a<- bind_rows(C5_BOOST, C5_D_TREE, KLAB) %>%
+  group_by(model) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+
+a +  labs(title = "Test 2",
+          subtitle = "Top 3 classifiers ROC results",
+          caption = "A: (LOS_ICU <= 3), B: (3 < LOS < 10), C: (LOS >= 10)")
+```
+
+
+```{r top 3 models comparison}
+a<- bind_rows(C5_BOOST, C5_D_TREE, KLAB) %>%
+  group_by(model) %>% 
+  roc_curve(LOS_GROUP_ICU, .pred_A:.pred_C) %>%
+  autoplot()
+
+plot <- a +  labs(title = "",
+          subtitle = "Top 3 classifiers: C5.0 BT (  ), C5.0 DT (  ), SVM (  )",
+          caption = "A: (LOS_ICU <= 3), B: (3 < LOS < 10), C: (LOS >= 10)")
+plot
+```
+
+```{r}
+ggsave(file="test2.png", width=12, height=3, dpi=600)
+```
+
+
+Saving the notebook environment
+---
+
+```{r saving the environment image}
+save.image("CLASS_test_2.RData")
+```
+
+References:
+---
+
+Kappa
+
+
+https://stats.stackexchange.com/questions/82162/cohens-kappa-in-plain-english
+
+1. Landis and Koch, who characterized values
+
+ <0 as indicating no agreement
+ 0.00–0.20 as slight, 
+ 0.21–0.40 as fair, 
+ 0.41–0.60 as moderate, 
+ 0.61–0.80 as substantial, and 
+ 0.81–1 as almost perfect agreement. 
+
+2. Fleiss's equally arbitrary guidelines characterize kappas over
+
+">0.75 as excellent, 
+ 0.40 to 0.75 as fair to good, and 
+<0.40 as poor."

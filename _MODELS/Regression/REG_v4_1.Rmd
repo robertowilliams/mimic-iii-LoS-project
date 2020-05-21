@@ -1,0 +1,249 @@
+---
+title: "Tidymodels Test"
+output: "html_notebook"
+#editor_options: 
+#  chunk_output_type: inline
+---
+
+```{r,}
+library(tidymodels)
+library(skimr)
+library(tibble)
+library(tidyverse)
+library(magrittr)
+library(broom)
+```
+
+```{r}
+set.seed(2020)
+```
+
+```{r}
+mimic <- read.csv("~/Desktop/THESIS-II/thesis/NOTEBOOKS/EDA_SUBSET/data_output/mimic_icu_d.csv")
+```
+
+```{r, eval=T}
+mimic %>% summary()
+```
+
+```{r, eval=T}
+mimic %>% 
+  skim()
+```
+
+```{r}
+mimic %>% glimpse()
+```
+
+```{r, eval=FALSE}
+ mimic %<>% select( -Nervous, 
+                    -Blood, 
+                    -Digestive, 
+                    -Place_of_occurrence, 
+                    -Digestive,
+                    -Skin, 
+                    -Undetermined, 
+                    -External,
+                    -Perinatal, 
+                    -Legal, 
+                    -Pregnancy,
+                    -Alb_Creatine_Urine,
+                    -Creatine_Clearance,
+                    -Hematocrit,
+                    -Hematocrit_Ascites,
+                    -Hematocrit_CSF, 
+                    -Hematocrit_Joint_Fluid,   
+                    -Hematocrit_Other_Fluid, 
+                    -Hematocrit_Pleural,
+                    -Protein_Creatinine_Ratio, 
+                    -Sodium, 
+                    -Sodium_Whole_Blood, 
+                    -Uric_Acid, 
+                    -Urea_Nitrogen,
+                    -Coronary_angioplasty,
+                    -HADM_ID, -LOS_GROUP_ICU,
+                    -FLAG
+                    )
+```
+
+```{r}
+ mimic %<>% select( #-Nervous, 
+ #                    -Blood, 
+ #                    -Digestive, 
+ #                    -Place_of_occurrence, 
+ #                    -Digestive,
+ #                    -Skin, 
+ #                    -Undetermined, 
+ #                    -External,
+ #                    -Perinatal, 
+ #                    -Legal, 
+ #                    -Pregnancy,
+ #                    -Alb_Creatine_Urine,
+ #                    -Creatine_Clearance,
+ #                    -Hematocrit,
+ #                    -Hematocrit_Ascites,
+ #                    -Hematocrit_CSF, 
+ #                    -Hematocrit_Joint_Fluid,   
+ #                    -Hematocrit_Other_Fluid, 
+ #                    -Hematocrit_Pleural,
+ #                    -Protein_Creatinine_Ratio, 
+ #                    -Sodium, 
+ #                    -Sodium_Whole_Blood, 
+ #                    -Uric_Acid, 
+ #                    -Urea_Nitrogen,
+ #                    -Coronary_angioplasty,
+                     -HADM_ID, 
+ #                    -LOS_GROUP_ICU,
+                     #-FLAG
+                    )
+```
+
+
+```{r}
+model <- lm( formula = LOS_ICU ~ ., data = mimic, na.action = na.omit)
+
+summary(model)
+```
+
+```{r}
+mimic %>% colnames()
+```
+
+Sampling the mimic dataframe
+
+```{r}
+mimic_split <- initial_split(data = mimic, prop = 0.80)
+
+mimic_train <- training(mimic_split)
+mimic_test  <- testing(mimic_split)
+```
+
+Pre-processing with `recipes`
+
+```{r}
+mimic_recipe <- 
+  recipe(LOS_ICU ~., data = mimic_train) %>%
+  step_corr(all_numeric(), -all_outcomes()) %>% 
+  step_center(all_numeric(), -all_outcomes()) %>% 
+  step_scale(all_numeric(), -all_outcomes()) %>% 
+  #step_dummy(all_nominal(), -all_outcomes()) %>% 
+  prep(retain = TRUE)
+```
+
+Executing the pre-processing
+```{r}
+train_baked <- bake(mimic_recipe, new_data = mimic_train)
+test_baked  <- bake(mimic_recipe, new_data = mimic_test)
+```
+
+```{r}
+model <- lm( formula = LOS_ICU ~ ., data = mimic)
+summary(model)
+```
+
+
+MODELS
+
+RANDOM FOREST
+---
+ranger
+```{r}
+ranger_fit <- rand_forest(trees = 100, mode = "regression") %>% 
+  set_engine("ranger") %>% 
+  fit(LOS_ICU ~., data = train_baked)
+```
+Model Validation
+```{r}
+ranger_fit %>% 
+  predict(test_baked) %>% 
+  bind_cols(test_baked) %>% 
+  metrics(truth = LOS_ICU, estimate = .pred)
+```
+
+randomForest
+```{r}
+rf_fit <- rand_forest(trees = 100, mode = "regression") %>% 
+  set_engine("randomForest") %>% 
+  fit(LOS_ICU ~., data = train_baked)
+```
+Model Validation
+```{r}
+rf_fit %>% 
+  predict(test_baked) %>% 
+  bind_cols(test_baked) %>% 
+  metrics(truth = LOS_ICU, estimate = .pred)
+```
+
+
+BOOSTED TREES
+---
+
+```{r}
+boost_fit <- boost_tree(trees = 200, mode = "regression" ) %>% 
+  set_engine("xgboost") %>% 
+  fit(LOS_ICU ~., data = train_baked)
+```
+Model Validation
+```{r}
+boost_fit %>% 
+  predict(test_baked) %>% 
+  bind_cols(test_baked) %>% 
+  metrics(truth = LOS_ICU, estimate = .pred)
+```
+
+
+DECISION TREES
+---
+rpart
+```{r}
+dtrees_fit <- decision_tree(mode = "regression", cost_complexity = 0.0001, min_n = 5, tree_depth = 30) %>% 
+  set_engine("rpart") %>% 
+  fit(LOS_ICU ~., data = train_baked)
+```
+Model Validation
+```{r}
+dtrees_fit %>% 
+  predict(test_baked) %>% 
+  bind_cols(test_baked) %>% 
+  metrics(truth = LOS_ICU, estimate = .pred)
+```
+
+
+LINEAR REGRESSION
+---
+lm
+```{r}
+lm_fit <- linear_reg(mode = "regression", penalty = NULL, mixture = NULL) %>% 
+  set_engine("lm") %>% 
+  fit(LOS_ICU ~., data = train_baked)
+```
+
+
+Model Validation
+```{r}
+lm_fit %>% 
+  predict(test_baked) %>% 
+  bind_cols(test_baked) %>% 
+  metrics(truth = LOS_ICU, estimate = .pred)
+```
+
+
+
+__References:__
+
+Kappa
+https://stats.stackexchange.com/questions/82162/cohens-kappa-in-plain-english
+Landis and Koch, who characterized values
+
+ <0 as indicating no agreement
+ 0.00–0.20 as slight, 
+ 0.21–0.40 as fair, 
+ 0.41–0.60 as moderate, 
+ 0.61–0.80 as substantial, and 
+ 0.81–1 as almost perfect agreement. 
+
+Fleiss's equally arbitrary guidelines characterize kappas over
+
+">0.75 as excellent, 
+ 0.40 to 0.75 as fair to good, and 
+<0.40 as poor."

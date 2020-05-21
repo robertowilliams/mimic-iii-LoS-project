@@ -1,0 +1,718 @@
+---
+title: "MIMIC-III ADMISSIONS TABLE"
+output: "html_notebook"
+editor_options: 
+  chunk_output_type: inline
+---
+
+# LOS ICU Range definition
+```{r}
+X<-1.8
+Y<-10
+```
+
+
+## Libraries
+```{r library, message=FALSE}
+library(tidyverse)
+library(ggfittext)
+library(skimr)
+library(funModeling)
+library(magrittr)
+```
+
+---
+
+## Loading the Datasets
+```{r loading data, message=T, warning=T}
+#setwd("~/Documents/_DATA/original/")
+setwd("~/Documents/Documents/THESIS/THESIS-II/thesis/NOTEBOOKS/_DATA/original")
+df_adm  <- read_csv("ADMISSIONS.csv")
+```
+
+___
+---
+
+## Exploratory Data Analysis
+
+```{r, eval = FALSE}
+skim(df_adm)
+```
+
+
+```{r}
+df_status(df_adm)
+```
+
+QUALITATIVE VARIABLES
+
+ADMISSION_TYPE
+```{r bar plot, eval=FALSE}
+ggplot(data = df_adm, aes(x = ADMISSION_TYPE)) +
+  geom_bar(color="white", fill="steelblue") +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.4)+
+  ylim(-1000, 45000)
+```
+
+ADMISSION_LOCATION
+```{r bar plot, eval=FALSE}
+Location<-fct_infreq(df_adm$ADMISSION_LOCATION)
+ggplot(data = df_adm, aes(x = Location)) +
+  geom_bar(color="white", fill="steelblue") +
+  geom_text(stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylim(0, 25000) +
+    coord_flip()
+```
+
+DISCHARGE_LOCATION
+```{r bar plot discharge loc, eval=FALSE}
+Discharge_location <- fct_infreq(df_adm$DISCHARGE_LOCATION)
+df_adm %>% 
+ggplot(aes(x = Discharge_location)) +
+  geom_bar(color="white", fill="steelblue") +
+  geom_text(stat='count', aes(label=..count..),hjust = -0.25 , vjust = 0.5, size = 3.5) +
+  theme(axis.text.x = element_text(angle = 0,  hjust = 0.5   , vjust = 0  , size = 10), 
+        axis.text.y = element_text(angle = 0,  hjust = 0     , vjust = 0  , size = 10)) +
+  ylim(0, 22000)+
+  coord_flip()
+```
+
+```{r, eval = FALSE}
+df_adm %>% 
+  select(DISCHARGE_LOCATION) %>% 
+  unique() #>% 
+  #arrange()
+```
+
+
+INSURANCE
+```{r Insurance, eval=FALSE}
+Insurance <- fct_infreq(df_adm$INSURANCE)
+ggplot(data = df_adm, aes(x = Insurance)) +
+  geom_bar(color="white", fill="steelblue") +
+  geom_text(stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 12)) +
+  ylim(0, 32000) +
+  coord_flip()
+```
+
+MARITAL_STATUS
+```{r Marital Status, eval=FALSE}
+marital_status<- fct_infreq(df_adm$MARITAL_STATUS)
+ggplot(data = df_adm, aes(x = marital_status)) +
+  geom_bar(color="white", fill="steelblue") +
+  geom_text( stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylim(0, 30000)+
+  coord_flip()
+```
+
+RELIGION
+```{r Religion, eval=FALSE}
+religion<- fct_infreq(df_adm$RELIGION)
+ggplot(data = df_adm, aes(x = religion)) +
+  geom_bar(color="white", fill="steelblue") +
+  geom_text( stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylim(0, 30000)+
+  coord_flip()
+```
+
+LANGUAGE
+
+```{r Language}
+df_adm$LANGUAGE %>% unique()
+
+```
+
+ETHNICITY
+```{r Ethnicity, fig.height = 20, fig.width = 20, eval=FALSE}
+df_adm %>% 
+  select(ETHNICITY) %>% 
+ggplot(aes(x = fct_infreq(ETHNICITY))) +
+  geom_bar(width = 0.95, color="white", fill="steelblue") +
+  geom_text(size = 6, stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.4, size =16), axis.text.y = element_text(size =16)) +
+  ylim(0, 44000) +
+  coord_flip()
+```
+
+
+#### Cheking unique patients and admissions.
+
+Number of Unique patients
+```{r}
+pat_n <- df_adm %>% 
+  distinct(SUBJECT_ID) %>% 
+  count()
+print(paste("Number of unique Patients: ", pat_n))
+```
+
+Number of Unique admissions
+```{r}
+ad_n <- df_adm %>% 
+  distinct(HADM_ID) %>% 
+  count()
+print(paste("Number of unique Admissions: ", ad_n))
+```
+
+Readmission rate
+```{r}
+readim <- round((ad_n/pat_n - 1), 4)*100
+print(paste("Rate of readmissions:", readim, "%"))
+```
+
+
+--- A
+#### Removing the obvious Newborn patients which are not the demographic of interest (Age >50)
+
+Checking number of Admission Type
+```{r}
+df_adm$ADMISSION_TYPE %>% unique()
+```
+
+Counting the number of Newborn Admissions
+```{r}
+NB_adm_type <- df_adm %>% 
+  filter(ADMISSION_TYPE == "NEWBORN") %>% count()
+print(paste("Newborn Admissions: ", NB_adm_type))
+```
+
+```{r removing newborn}
+df_adm_A <- df_adm %>% 
+  filter(ADMISSION_TYPE != "NEWBORN")
+```
+
+--- B
+
+#### Removing Admissions with result in DEATH.
+If the admissions resulting in DEATH should not be included because the LOS is consider that
+the patient left alive from the hospital.
+I can use the `HOSPITAL_EXPIRATION_FLAG` to filter such admissions.
+
+```{r}
+df_adm_A %>% 
+  filter(HOSPITAL_EXPIRE_FLAG == 1)
+```
+
+```{r}
+df_adm_A %>% 
+  filter(HOSPITAL_EXPIRE_FLAG == 1) %>% 
+  count() 
+```
+
+```{r filtering expired patient in ICU}
+df_adm_B <- df_adm_A %>% 
+  filter(!HOSPITAL_EXPIRE_FLAG == 1) 
+```
+
+--- C
+
+#### Calculating the LOS and Removing the Admissions with negative LOS.
+Negative LOS indicates that the patient died before the admission.`
+```{r}
+df_adm_B$LOS_HOSP <- round(as.numeric(difftime(df_adm_B$DISCHTIME, df_adm_B$ADMITTIME, units='days')),2)
+```
+
+Checking the statistical description of the new feature.
+```{r, eval = FALSE}
+describe(df_adm_B$LOS_HOSP)
+```
+
+Checking the negative and positive LOS_HOSP
+```{r}
+neg_los <- df_adm_B %>% 
+  filter(LOS_HOSP < 0) %>% 
+  nrow()
+print(paste("Number of admissions with negative LOS: ", neg_los))
+```
+
+```{r}
+pos_los <- df_adm_B %>% 
+  filter(LOS_HOSP > 0) %>% 
+  nrow()
+print(paste("Number of admissions with positive LOS: ", pos_los))
+```
+
+Dropping negative LOS_HOSP
+```{r dropping negative LOS}
+df_adm_C <- df_adm_B %>% 
+  filter(LOS_HOSP > 0)
+```
+
+```{r, eval = FALSE}
+df_adm_B$LOS_HOSP %>%
+  describe()
+```
+
+Checking the result searching for unique admissions
+```{r, eval = FALSE}
+df_adm_C %>% 
+  n_distinct(vars(HADM_ID)) 
+```
+Descriptive analysis after the drop negative values.
+```{r, eval = FALSE}
+describe(df_adm_C$LOS_HOSP)
+```
+
+
+```{r, warning= FALSE, message=FALSE, eval = FALSE}
+df_adm_A %>% describe()
+df_adm_B %>% describe()
+df_adm_C %>% describe()
+```
+
+#### Calculating the `AGE`
+
+Importing the Patient table (already cleaned)
+```{r Importing df_pat_x}
+#setwd("~/Documents/_DATA/subset/")
+setwd("~/Documents/Documents/THESIS/THESIS-II/thesis/NOTEBOOKS/_DATA/subset")
+df_pat_A <- read_csv("df_pat_5.csv")
+```
+
+--- D
+
+Inner join `Patient` (A) with `Admission` (C)
+It is necessary to add DOB to the admission to calculate the `AGE`.
+
+```{r Inner join Patient and Admission}
+df_adm_D <- df_adm_C %>% 
+  inner_join ( df_pat_A , by = "SUBJECT_ID" ) 
+```
+
+```{r, warning=FALSE, message = FALSE, eval=FALSE}
+df_adm_D %>%  describe() 
+```
+
+```{r Creating the variable AGE}
+df_adm_D$ADMITTIME <- as.Date(df_adm_D$ADMITTIME)
+df_adm_D$DOB <- as.Date(df_adm_D$DOB)
+
+df_adm_D$AGE <- round(
+  as.numeric(difftime(df_adm_D$ADMITTIME, df_adm_D$DOB, 
+                      units = "days")/365.242), 2)
+```
+
+Filtering the Admissions entries for patients with `AGE` < 50, which are part of demograpgic of interest.
+It was filtered all the patients with age greater than 89 years old because such patients had their
+DOB anonimized preventing of calculate the correct age.
+(https://mimic.physionet.org/mimicdata/time/)
+
+
+```{r, eval = FALSE}
+colnames(df_adm_D)
+```
+
+
+```{r histogram plot, eval=FALSE}
+ggplot(df_adm_D, aes(x=AGE, fill=GENDER, color=GENDER)) +
+  geom_histogram(binwidth = 1, position="identity", alpha=0.3)
+
+```
+
+
+
+```{r}
+df_adm_D %>% 
+  filter(AGE > 90) %>% 
+  count()
+```
+
+
+```{r Filtering AGE 50~90}
+df_adm_D %<>% 
+  filter(AGE >50 & AGE <90)
+```
+
+```{r, eval=FALSE}
+df_adm_D %>% 
+  ggplot(aes(x = AGE))+
+  geom_histogram(binwidth = 1,  color="white", fill="steelblue")
+
+```
+
+Once I have the dataset filtered with the AGE of interest some Feature Transformation are necessary.
+
+```{r, eval=FALSE}
+df_adm_D %>% 
+ # filter(LOS_HOSP < 12) %>% 
+ggplot(aes(x = LOS_HOSP))+
+geom_histogram(binwidth = 2,  color="white", fill="steelblue")+
+  xlim(0, 60)
+```
+
+ETHNICITY
+```{r fig.height = 20, fig.width = 20, eval=FALSE}
+df_adm %>% 
+  select(ETHNICITY) %>% 
+ggplot(aes(x = fct_infreq(ETHNICITY))) +
+  geom_bar(width = 0.95, color="white", fill="steelblue") +
+  geom_text(size = 6, stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.4, size =16), axis.text.y = element_text(size =16)) +
+  ylim(0, 44000) +
+  coord_flip()
+```
+
+```{r, eval = FALSE}
+df_adm_D$LOS_HOSP %>%
+  describe()
+```
+
+#### Ethnicity
+
+```{r fig.height = 20, fig.width = 20, eval=FALSE}
+
+df_adm_D %>% 
+  ggplot(aes(x = fct_infreq(ETHNICITY), y = LOS_HOSP))+
+  geom_boxplot(color="black", fill="steelblue") +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.text.x = element_text(angle = 0, hjust = 0.4, size =16), 
+    axis.text.y = element_text(size =16),
+    axis.title.y = element_text(size = 24)
+    ) +
+  labs(x="Ethnicity", y = "Count") +
+  coord_flip()
+
+```
+
+It is necessary to group the several ethnicities variations. 
+Ethnicities:
+
+1. White
+2. Latino
+3. Black
+4. Asian
+5. Other
+
+```{r}
+eth_list <- df_adm_D %>%
+   count(ETHNICITY) %>% 
+  arrange(desc(n)) %>% 
+  as_tibble() 
+
+eth_list
+```
+
+```{r}
+a <- round((eth_list$n/sum(eth_list$n)*100),2)
+eth_list$n_perc <- a
+eth_list
+```
+
+
+```{r}
+eth_list$n_perc <- eth_list[,3]
+eth_list$n_perc <- eth_list[,-3]
+eth_list
+# write_csv(eth_list, "data/ethnical_groups.csv")
+```
+
+
+1. White: WHITE, PORTUGUESE, "WHITE - OTHER EUROPEAN", "MIDDLE EASTERN", "WHITE - EASTERN EUROPEAN"
+
+2. Latino: "HISPANIC OR LATINO", "SOUTH AMERICAN", "HISPANIC/LATINO - PUERTO RICAN", "WHITE - BRAZILIAN", "HISPANIC/LATINO - GUATEMALAN", "HISPANIC/LATINO - DOMINICAN", "HISPANIC/LATINO - CENTRAL AMERICAN (OTHER)", "HISPANIC/LATINO - MEXICAN", "HISPANIC/LATINO - SALVADORAN"
+
+3. Black: "BLACK/AFRICAN AMERICAN", "BLACK/CAPE VERDEAN", "BLACK/HAITIAN", "BLACK/AFRICAN", 
+
+4. Asian: ASIAN, "ASIAN - CHINESE", "ASIAN - JAPANESE", "ASIAN - VIETNAMESE", "ASIAN - OTHER", "ASIAN - ASIAN INDIAN", "ASIAN - KOREAN", "ASIAN - FILIPINO", 
+5. Other: OTHER, "MULTI RACE ETHNICITY", "AMERICAN INDIAN/ALASKA NATIVE", "NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER", "AMERICAN INDIAN/ALASKA NATIVE FEDERALLY RECOGNIZED TRIBE"
+
+6. Unkown: "UNKNOWN/NOT SPECIFIED", "PATIENT DECLINED TO ANSWER",  "UNABLE TO OBTAIN", 
+
+
+```{r Mapping ethinicity}
+df_adm_D$ETHNICITY <- as.character(df_adm_D$ETHNICITY)
+df_adm_D <- df_adm_D %>%
+  mutate(ETHNICITY_MAPPED = case_when(
+    
+    # Other
+    ETHNICITY == "OTHER" ~ "Other",
+    ETHNICITY == "MULTI RACE ETHNICITY" ~ "Other",
+    ETHNICITY == "AMERICAN INDIAN/ALASKA NATIVE" ~ "Other",
+    ETHNICITY == "NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER" ~ "Other",
+    ETHNICITY == "MIDDLE EASTERN" ~ "Other",
+    ETHNICITY == "AMERICAN INDIAN/ALASKA NATIVE FEDERALLY RECOGNIZED TRIBE" ~ "Other",
+    
+    # Unkown
+    ETHNICITY == "UNKNOWN/NOT SPECIFIED" ~ "Unkown",
+    ETHNICITY == "PATIENT DECLINED TO ANSWER" ~ "Unkown",
+    ETHNICITY == "UNABLE TO OBTAIN" ~ "Unkown",
+    
+    #Asian
+    ETHNICITY == "ASIAN" ~ "Asian",
+    ETHNICITY == "ASIAN - CHINESE" ~ "Asian",
+    ETHNICITY == "ASIAN - JAPANESE" ~ "Asian",
+    ETHNICITY == "ASIAN - VIETNAMESE" ~ "Asian",
+    ETHNICITY == "ASIAN - OTHER" ~ "Asian",
+    ETHNICITY == "ASIAN - ASIAN INDIAN" ~ "Asian",
+    ETHNICITY == "ASIAN - KOREAN" ~ "Asian",
+    ETHNICITY == "ASIAN - FILIPINO" ~ "Asian",
+    ETHNICITY == "ASIAN - THAI" ~ "Asian",
+    ETHNICITY == "ASIAN - CAMBODIAN" ~ "Asian",
+    
+    #Black
+    ETHNICITY == "BLACK/AFRICAN AMERICAN" ~ "Black",
+    ETHNICITY == "BLACK/CAPE VERDEAN" ~ "Black",
+    ETHNICITY == "BLACK/HAITIAN" ~ "Black",
+    ETHNICITY == "BLACK/AFRICAN" ~ "Black",
+    
+    #Latino
+    ETHNICITY == "HISPANIC OR LATINO" ~ "Latino",
+    ETHNICITY == "SOUTH AMERICAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - PUERTO RICAN" ~ "Latino",
+    ETHNICITY == "WHITE - BRAZILIAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - GUATEMALAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - DOMINICAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - CENTRAL AMERICAN (OTHER)" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - MEXICAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - SALVADORAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - CUBAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - HONDURAN" ~ "Latino",
+    ETHNICITY == "HISPANIC/LATINO - COLOMBIAN" ~ "Latino",
+    ETHNICITY == "CARIBBEAN ISLAND" ~ "Latino",
+    
+    #White
+    ETHNICITY == "WHITE" ~ "White",
+    ETHNICITY == "PORTUGUESE" ~ "White",
+    ETHNICITY == "WHITE - OTHER EUROPEAN" ~ "White",
+    ETHNICITY == "WHITE - EASTERN EUROPEAN" ~ "White",
+    ETHNICITY == "WHITE - RUSSIAN" ~ "White",
+    TRUE ~ ETHNICITY
+  ))
+df_adm_D$ETHNICITY_MAPPED <- as.factor(df_adm_D$ETHNICITY_MAPPED)
+```
+
+```{r}
+df_adm_D$ETHNICITY_MAPPED %>% unique()
+```
+
+```{r}
+df_adm_D$ETHNICITY_MAPPED %>%
+  skim()
+```
+
+
+ETHNICITY
+```{r, eval=FALSE}
+df_adm_D %>% 
+ggplot(aes(x = (fct_infreq(ETHNICITY_MAPPED)))) +
+  geom_bar(width = 0.95, color="white", fill="steelblue") +
+  geom_text(size = 5, stat='count', aes(label=..count..), hjust=-0.3) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.4, size =14), axis.text.y = element_text(size =14)) +
+  ylim(0, 28000) +
+  xlab("Ethnicity") +
+  coord_flip()
+```
+
+Boxplots to identify outliers
+    
+```{r, eval=FALSE}
+df_adm_D %>% 
+ # filter(LOS_HOSP < 12) %>% 
+ggplot(aes(x = ETHNICITY_MAPPED, y = LOS_HOSP, fill=ETHNICITY_MAPPED))+
+geom_boxplot(alpha = 0.7) +
+    theme(legend.position="center", axis.text.x = element_text(angle = 0, hjust = 0.4, size =14), axis.text.y = element_text(size =14))+ 
+  xlab("Ethnicity") +
+  ylab("LOS - Hospital") +
+    coord_flip()
+```
+
+
+Filtering the outliers
+```{r, eval=FALSE}
+df_adm_D %>% 
+  filter(LOS_HOSP < 50) %>% 
+ggplot(aes(x = ETHNICITY_MAPPED, y = LOS_HOSP, fill=ETHNICITY_MAPPED))+
+geom_boxplot(alpha = 0.7) +
+    theme(legend.position="center", axis.text.x = element_text(angle = 0, hjust = 0.4, size =14), axis.text.y = element_text(size =14))+ 
+  xlab("Ethnicity") +
+  ylab("LOS - Hospital") +
+    coord_flip()
+```
+
+Counting the outliers
+```{r}
+n_out<- df_adm_D %>%
+  filter(LOS_HOSP >50) %>% 
+  count()
+n_nor<- df_adm_D %>%
+  filter(LOS_HOSP <=50) %>% 
+  count()
+a <- c("outliers", "norm")
+b <- rbind(n_out, n_nor)  
+
+cbind(a,b) %>% as_tibble()
+```
+
+
+Dropping variables.
+
+```{r, eval = FALSE}
+df_adm_D %>% 
+  colnames()
+```
+
+```{r dropping variables}
+df_adm_E <- df_adm_D %>% 
+  select(HADM_ID, SUBJECT_ID, GENDER, AGE, ETHNICITY_MAPPED, ADMISSION_TYPE, LOS_HOSP)
+```
+
+
+```{r, eval = FALSE}
+df_adm_E %>%  head()
+```
+
+Joinning with `df_stay_A`
+
+Getting the default ICU_LOS
+
+Loading df_stay_A.csv
+```{r loading data stay}
+#setwd("~/Documents/_DATA/subset/")
+setwd("~/Documents/Documents/THESIS/THESIS-II/thesis/NOTEBOOKS/_DATA/subset")
+df_stay_A <- read_csv("df_stay_5.csv")
+```
+
+```{r inner join stay}
+df_adm_F <- df_adm_E %>% 
+  inner_join ( df_stay_A , by = "HADM_ID" ) 
+```
+
+```{r}
+df_adm_F %<>% select(-LOS_HOSP, LOS_HOSP)
+df_adm_F %<>% rename(LOS_ICU = LOS)
+```
+
+
+Checking the LOS_ICU
+```{r boxplot eth vs LOS-ICU, eval=FALSE}
+df_adm_F %>% 
+#  filter(LOS_ICU < 6) %>% 
+ggplot(aes(x = ETHNICITY_MAPPED, y = LOS_ICU, fill=ETHNICITY_MAPPED))+
+geom_boxplot(alpha = 0.7) +
+    theme(legend.position="center", axis.text.x = element_text(angle = 0, hjust = 0.4, size =14), axis.text.y = element_text(size =14))+ 
+  xlab("Ethnicity") +
+  ylab("LOS-ICU") +
+    coord_flip()
+```
+
+```{r}
+df_adm_F %>% dim()
+```
+
+Filtering the outliers
+```{r Filtering Outliers}
+df_adm_F %<>% 
+  filter(LOS_ICU < 100)
+```
+
+
+```{r LOS Diff calc}
+df_adm_F %<>% 
+  mutate(LOS_diff = LOS_HOSP -LOS_ICU) 
+```
+
+
+```{r, eval = FALSE}
+df_adm_F %>% 
+  filter(LOS_diff <=0) %>% 
+  select(LOS_diff) %>% 
+  summary()
+```
+
+Drop the admission which the LOS_ICU is greater than LOS_HOSP. Something is wrong with such data, how can the total stay in the hospital be smaller than ICU stay?
+```{r}
+df_adm_F %>% nrow()
+df_adm_F %<>% 
+  filter(LOS_diff>0)
+df_adm_F %>% nrow()
+```
+
+```{r, eval = FALSE}
+df_adm_F %>%  colnames()
+```
+
+Removing variables which it will not be used
+```{r dropping variables}
+df_adm_F %<>% 
+  select(-SUBJECT_ID.y, -ICUSTAY_ID, 
+         -LAST_CAREUNIT, 
+         -INTIME, 
+         -OUTTIME, 
+         -LOS_diff)
+```
+
+
+```{r, eval = FALSE}
+df_adm_F %>%  colnames()
+```
+
+Creating classification groups for LOS_ICU
+
+```{r LOS ranges, eval = TRUE}
+#X<-3
+#Y<-10
+
+df_adm_F %<>% 
+  mutate(LOS_GROUP_ICU = case_when(
+    LOS_ICU <= X ~ "A",
+    LOS_ICU >X & LOS_ICU <Y ~ "B",
+    LOS_ICU >= Y ~ "C",
+    TRUE ~ "O"
+  ))
+
+df_adm_F %>% 
+  select(LOS_GROUP_ICU) %>% 
+  table() 
+```
+
+```{r}
+df_adm_F$LOS_GROUP_ICU <- as.factor(df_adm_F$LOS_GROUP_ICU)
+```
+
+```{r}
+df_adm_F %>% 
+  select(LOS_GROUP_ICU) %>% 
+  table() %>% 
+  prop.table() %>% 
+  round(3)
+```
+
+```{r, eval = FALSE}
+df_adm_F %>% colnames()
+```
+
+```{r dropping variables}
+df_adm_G <- df_adm_F %>%
+  select(-LOS_ICU,   LOS_ICU, 
+         -LOS_HOSP , 
+         -LOS_GROUP_ICU, LOS_GROUP_ICU
+         )
+```
+
+```{r}
+df_adm_G %>% colnames()
+```
+
+```{r}
+df_adm_G %<>% rename(SUBJECT_ID = SUBJECT_ID.x)
+```
+
+```{r, eval = FALSE}
+df_adm_G %>% 
+  glimpse()
+```
+
+```{r}
+df_adm_G %<>% mutate_if(is_character, as_factor)
+```
+
+```{r exporting the final df}
+setwd("~/Documents/_DATA/subset/")
+write_csv(df_adm_G, "df_adm_1.8-10.csv")
+```
+
+

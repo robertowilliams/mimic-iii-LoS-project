@@ -1,0 +1,217 @@
+---
+title: "Prediction Dataset for ICU LOS"
+output: "html_notebook"
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+library(DataExplorer)
+library(broom)
+library(magrittr)
+library(caret)
+library(pls)
+library(forcats)
+library(skimr)
+set.seed(2020)
+```
+Load the datasets:
+
+```{r, message=FALSE, warning=TRUE}
+DATA <- read_csv("mimic_c.csv") %>% 
+         mutate_if(is_character, as_factor) %>% 
+         select(everything(), -starts_with("LOS"), starts_with("LOS"))
+```
+
+```{r}
+DATA %>% names()
+```
+
+```{r}
+DATA %>%  skim()
+```
+
+Initial mandatory Drops:
+```{r}
+DATA %<>% 
+  select(-HADM_ID, -SUBJECT_ID.x, -SUBJECT_ID.y, 
+         -LOS_HOSP,
+         -LOS_GROUP_ICU,
+         -LOS_GROUP_HOSP
+         )
+
+DATA %>% names()
+```
+
+
+Statistical significance of the "RAW" MIMIC
+
+```{r}
+MODEL_raw <- lm(formula = LOS_ICU ~ ., data = DATA)
+summary(MODEL_raw)
+```
+
+
+## Investigating the best prediction subset for Admission Type equal URGENT.
+
+```{r}
+DATA_urgent <- DATA %>% filter(ADMISSION_TYPE %in% "URGENT") %>% 
+  select(-ADMISSION_TYPE)
+DATA_urgent %>% dim()
+```
+
+
+```{r}
+# <- DATA
+MODEL_urgent  <- lm( formula = LOS_ICU ~ ., data = DATA_urgent)
+summary(MODEL_urgent)
+```
+
+
+First filter of variables by significance, except the demographics variables.
+
+```{r}
+DATA_urgent_2 <- DATA_urgent %>% select(
+- GENDER,
+- AGE,
+# ETHNICITY_MAPPEDUnkown
+# ETHNICITY_MAPPEDOther
+# ETHNICITY_MAPPEDLatino
+# ETHNICITY_MAPPEDAsian
+# ETHNICITY_MAPPEDBlack
+# FIRST_CAREUNITSICU
+# FIRST_CAREUNITCCU
+# FIRST_CAREUNITMICU
+-Circulatory,
+-Coronary_angioplasty,
+-Metabolic,
+-Genitourinary,
+-Nervous,
+-Neoplasms,
+-Ill.Defined,
+-Aortocoronary_bypass,
+-Factors_influencing,
+-Tobacco_use,
+-Injury_Poisoning,
+-Mental,
+-Infectious,
+-Blood,
+-Musculoskeletal,
+-Digestive,
+-Skin,
+-Accident,
+-Misadventure,
+-Congenital,
+-Adverse_Effect,
+-Anticoagulants,
+-Place_of_occurrence,
+-Nonnatural,
+-Poisoning,
+-Undetermined,
+-External,
+-Perinatal,
+-Legal,
+-Pregnancy
+) 
+```
+
+```{r}
+DATA_urgent_2 %>% skim()
+```
+
+```{r}
+lm(formula = LOS_ICU ~ ., data = DATA_urgent_2) %>%  summary()
+```
+
+Let's filter the ICU SICU
+```{r}
+DATA_urgent_3 <- DATA_urgent_2 %>% 
+  filter(FIRST_CAREUNIT %in% "SICU") %>% 
+  select(-FIRST_CAREUNIT)                      
+```
+
+```{r}
+ lm(formula = LOS_ICU ~., data = DATA_urgent_3) %>% summary()
+```
+
+
+PCA and PLS application
+
+
+
+```{r}
+training <- DATA_urgent$LOS_ICU %>% createDataPartition(p = 0.8, list = FALSE)
+
+train.data <- DATA_urgent[training,]
+test.data <- DATA[-training,]
+```
+
+
+PCA
+```{r }
+model_pcr <- train(
+  LOS_ICU~., data = train.data, method= "pcr",
+  scale = FALSE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+)
+```
+
+```{r }
+plot(model_pcr)
+```
+
+```{r }
+model_pcr$bestTune
+```
+
+```{r }
+summary(model_pcr$finalModel)
+```
+
+Prediction
+
+```{r }
+predictions_pcr <- model_pcr %>% predict(test.data)
+tibble(
+  RMSE = caret::RMSE(predictions_pcr, test.data$LOS_ICU),
+  Rsquare = caret::R2(predictions_pcr, test.data$LOS_ICU)
+)
+```
+
+
+
+PLS
+
+```{r }
+model_pls <- train(
+  LOS_ICU~., data = train.data, method= "pls",
+  scale = FALSE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+)
+```
+
+```{r }
+plot(model_pls)
+```
+
+```{r }
+model_pls$bestTune
+```
+
+```{r }
+summary(model_pls$finalModel)
+```
+
+
+Prediction
+
+```{r }
+predictions_pls <- model_pls %>% predict(test.data)
+tibble(
+  RMSE = caret::RMSE(predictions_pls, test.data$LOS_ICU),
+  Rsquare = caret::R2(predictions_pls, test.data$LOS_ICU)
+)
+```
+

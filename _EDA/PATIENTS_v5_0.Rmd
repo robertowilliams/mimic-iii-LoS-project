@@ -1,0 +1,79 @@
+---
+title: "MIMIC-III ADMISSIONS TABLE"
+#output: html_notebook
+---
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(psych)
+library(ggpubr)
+```
+____
+## Loading the Datasets
+```{r}
+setwd("~/Documents/_DATA/original/")
+df_pat  <- read_csv("PATIENTS.csv")
+```
+
+change datatypes from `GENDER` and `EXPIRE_FLAG`
+```{r}
+df_pat$GENDER <-  as.factor(df_pat$GENDER)
+df_pat$EXPIRE_FLAG <-  as.factor(df_pat$EXPIRE_FLAG)
+```
+
+___
+## Exploratory Data Analysis
+
+### PATIENTS.csv EDA (df_pat)
+
+```{r}
+df_pat %>% 
+  summary()
+```
+
+```{r}
+str(df_pat)
+```
+
+Number of Unique patients
+```{r}
+pat_n <- df_pat %>% 
+  distinct(SUBJECT_ID) %>% 
+  count()
+pat_n
+```
+
+```{r}
+gender_perc <- df_pat %>% count(GENDER) %>% 
+  as_tibble() %>% 
+  mutate(perc = round((n/sum(n))*100,3))
+gender_perc
+```
+
+```{r}
+expire_perc <- df_pat %>% count(EXPIRE_FLAG) %>% 
+  as_tibble() %>% 
+  mutate(perc = round((n/sum(n))*100,3))
+expire_perc
+```
+
+#### Dropping variables
+
+```{r}
+df_pat %>% colnames()
+```
+
+```{r}
+df_pat_A <- df_pat %>% select(-c(ROW_ID, DOD, DOD_HOSP, DOD_SSN))
+```
+
+```{r}
+df_pat_A %>% colnames()
+```
+
+```{r}
+setwd("~/Documents/_DATA/subset/")
+write_csv(df_pat_A, "df_pat_5.csv")
+```
+
