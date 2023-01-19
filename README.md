@@ -1,5 +1,6 @@
 # mimic-iii-ehr-project
-Project to predict Length of Stay of patients with respiratory diseases using tidymodels.
+A Methodology for Estimating Hospital Intensive Care Unit Length of Stay Using Novel Machine Learning Tools
+https://ieeexplore.ieee.org/document/9356186
 
 **Author :** Roberto Williams Batista
 
